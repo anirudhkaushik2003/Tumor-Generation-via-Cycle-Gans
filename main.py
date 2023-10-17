@@ -20,6 +20,7 @@ from utils import *
 
 BATCH_SIZE = 1
 IMAGE_SIZE = 256
+IMG_CHANNELS = 1
 
 multiGPU = False
 epochs = 100
@@ -41,12 +42,20 @@ torch.manual_seed(manualSeed)
 data_transforms = transforms.Compose([
     transforms.Resize((IMAGE_SIZE,IMAGE_SIZE)),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)),
+    transforms.Normalize((0.5), (0.5)),
 ])
-TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
-VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
 
-dataset2 = BRATS(data_transforms)
+data_transforms2 = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((IMAGE_SIZE,IMAGE_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5), (0.5)),
+])
+
+
+
+dataset = Healthy(data_transforms2)
+dataset2 = BRATS(data_transforms2)
 
 min_length = min(len(dataset), len(dataset2))
 
@@ -57,19 +66,20 @@ dataset2 = torch.utils.data.Subset(dataset2, np.arange(min_length))
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=True)
 
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # initialize models
-modelG_1 = Generator(IMAGE_SIZE, 3)
-modelD_1 = Discriminator(3)
+modelG_1 = Generator(IMAGE_SIZE, IMG_CHANNELS)
+modelD_1 = Discriminator(IMG_CHANNELS)
 modelG_1.apply(weights_init)
 modelD_1.apply(weights_init)
-modelG_2 = Generator(256, 3)
-modelD_2 = Discriminator(3)
+modelG_2 = Generator(256, IMG_CHANNELS)
+modelD_2 = Discriminator(IMG_CHANNELS)
 modelG_2.apply(weights_init)
 modelD_2.apply(weights_init)
 
-dummy_img = np.ones((BATCH_SIZE, 3, IMAGE_SIZE, IMAGE_SIZE))
+dummy_img = np.ones((BATCH_SIZE, IMG_CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
 patch_shape = modelD_1(torch.FloatTensor(dummy_img)).shape[-1]
 
 if multiGPU:
@@ -95,7 +105,6 @@ criterionCycle = nn.L1Loss() # cycle loss (forward)
 
 ### PRINT STATS ###
 print("***********************")
-print(f"Converting {TRAIN_DIR.split('/')[-1].split('2')[0]}s to {TRAIN_DIR.split('/')[-1].split('2')[1]}s")
 print("Discriminator Patch shape: ", patch_shape)
 print("Number of samples per epoch: ", len(dataset))
 print("Multi GPU: ", multiGPU)
@@ -207,7 +216,7 @@ for epoch in range(epochs):
 
         if (step+1) % 500 == 0:
             print(f"Epoch [{epoch+1}/{epochs}], Step [{step+1}/{n_steps}], lossD: {np.mean(lossD_list):.2f}, lossG: {np.mean(lossG_list):.2f}")
-            print(f"pred_zebra: {(D_zebra/(step+1)):.2f}, pred_horse: {(D_horse/(step+1)):.2f}")
+            print(f"pred_tumor: {(D_zebra/(step+1)):.2f}, pred_real: {(D_horse/(step+1)):.2f}")
             print()
 
 

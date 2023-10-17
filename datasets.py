@@ -27,6 +27,7 @@ import matplotlib.gridspec as gridspec
 
 import seaborn as sns
 import imageio
+import PIL
 from skimage.transform import resize
 from skimage.util import montage
 
@@ -89,6 +90,7 @@ for vol in volumes:
             slices.append(slice)
 
 
+
 # randomly select 1000 slices
 slices = np.array(slices)
 np.random.shuffle(slices)
@@ -114,6 +116,8 @@ class BRATS(Dataset):
         f = f['image']
         f = np.array(f)
         f = f[:,:,0] # T1 slice
+        f = np.array(f)
+        f = f.astype(np.float32)
 
         if self.transform:
             f = self.transform(f)
@@ -123,11 +127,13 @@ class BRATS(Dataset):
 PATH2 = "/ssd_scratch/cvit/anirudhkaushik/datasets/healthy_brain/train/"
 healthy_brain = []
 for file in glob.glob(PATH2 + "*"):
-    print(file)
-    img = np.load(file)
-    img = cv2.normalize(img, None, norm_type=cv2.NORM_MINMAX)
-    img = img.reshape(img.shape[2:])
-    healthy_brain.append(img[:,:, img.shape[2]//2])
+    healthy_brain.append(file)
+
+
+healthy_brain = np.array(healthy_brain)
+# select 1200 slices randomly
+np.random.shuffle(healthy_brain)
+healthy_brain = healthy_brain[:1200]
 
 class Healthy(Dataset):
     def __init__(self, transform=None):
@@ -140,7 +146,16 @@ class Healthy(Dataset):
         return len(self.slices)
     
     def __getitem__(self, idx):
-        f = self.slices[idx]
+        file = self.slices[idx]
+        img = np.load(file)
+        img = cv2.normalize(img, None, norm_type=cv2.NORM_MINMAX)
+        img = img.reshape(img.shape[2:])
+        f = img[:,:, img.shape[2]//2]
+
+        # convert to cv2 img
+        f = np.array(f)
+        f = f.astype(np.float32)
+
         if self.transform:
             f = self.transform(f)
             return f
