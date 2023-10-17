@@ -46,26 +46,7 @@ data_transforms = transforms.Compose([
 TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
 VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
 
-dataset = HorseDataset(
-    root_horse=TRAIN_DIR + "/trainA",
-    transform=data_transforms,
-)
-val_dataset = HorseDataset(
-    root_horse=VAL_DIR + "/testA",
-    transform=data_transforms,
-)
-
-dataset2 = ZebraDataset(
-    root_zebra=TRAIN_DIR + "/trainB",
-    transform=data_transforms,
-)
-val_dataset2 = ZebraDataset(
-    root_zebra=VAL_DIR + "/testB",
-    transform=data_transforms,
-)
-
-dataset = torch.utils.data.ConcatDataset([dataset, val_dataset])
-dataset2 = torch.utils.data.ConcatDataset([dataset2, val_dataset2])
+dataset2 = BRATS(data_transforms)
 
 min_length = min(len(dataset), len(dataset2))
 

@@ -1,111 +1,146 @@
+from tqdm import tqdm
 import os
+import time
+from random import randint
+ 
+import gc 
 import numpy as np
+from scipy import stats
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
+from sklearn.model_selection import KFold
+
+import nibabel as nib
+import pydicom as pdm
+
+import h5py
+
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import matplotlib.animation as anim
+import matplotlib.patches as mpatches
+import matplotlib.gridspec as gridspec
+
+import seaborn as sns
+import imageio
+from skimage.transform import resize
+from skimage.util import montage
+
+from IPython.display import Image as show_gif
+from IPython.display import clear_output
+from IPython.display import YouTubeVideo
+
+import torch
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-from torchvision import transforms, datasets
+import torch.nn.functional as F
+
+from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.nn import MSELoss
+
+# !pip install albumentations==0.4.6
+import albumentations as A
+# from albumentations.pytorch import ToTensor, ToTensorV2
+
 import cv2
+
+
+from albumentations import Compose, HorizontalFlip
+# from albumentations.pytorch import ToTensor, ToTensorV2 
+
+import warnings
+warnings.simplefilter("ignore")
 
 IMAGE_SIZE = 256
 
+import time
 
-class ZebraDataset(Dataset):
-    def __init__(self, root_zebra, transform=None):
-        self.root_zebra = root_zebra
+st = time.time()
+# organize as per volumes
+PATH= "/ssd_scratch/cvit/anirudhkaushik/datasets/brats2020-training-data/BraTS2020_training_data/content/data/"
+
+# organize as per volumes
+volumes = {}
+import glob
+for file in glob.glob(PATH+'volume_*'):
+    file = file.split('/')[-1]
+    vol_ind = file.split('_')[1] 
+    if vol_ind not in volumes:
+        volumes[vol_ind] = []
+    volumes[vol_ind].append(file)
+
+# sort the slices
+for vol in volumes:
+    volumes[vol] = sorted(volumes[vol], key=lambda x: int(x.split('_')[3].split('.')[0]))
+
+# get slices with tumor (mask2 has white pixels for tumor)
+slices = []
+for vol in volumes:
+    for slice in volumes[vol]:
+        f = h5py.File(PATH+slice, 'r')
+        mask = f['mask']
+        mask = np.array(mask)
+        if np.sum(mask[:,:,1]) > 1000:
+            slices.append(slice)
+
+
+# randomly select 1000 slices
+slices = np.array(slices)
+np.random.shuffle(slices)
+slices = slices[:1200]
+print("Number of Tumor slices: ", len(slices))
+et = time.time()
+
+print("Time taken to load data: ", et-st)
+
+class BRATS(Dataset):
+    def __init__(self, transform=None):
         self.transform = transform
-
-        self.zebra_images = os.listdir(root_zebra)
-        self.length_dataset = len(self.zebra_images) # 1000, 1500
-        self.zebra_len = len(self.zebra_images)
+        self.slices = slices
+        self.path = PATH
+        self.image_size = IMAGE_SIZE
 
     def __len__(self):
-        return self.length_dataset
-
-    def __getitem__(self, index):
-        zebra_img = self.zebra_images[index % self.zebra_len]
-
-        zebra_path = os.path.join(self.root_zebra, zebra_img)
-
-        zebra_img = Image.open(zebra_path).convert("RGB")
-
-
-        if self.transform:
-            zebra_img = self.transform(zebra_img)
-
-        return zebra_img
+        return len(self.slices)
     
-
-class HorseDataset(Dataset):
-    def __init__(self, root_horse, transform=None):
-        self.root_horse = root_horse
-        self.transform = transform
-
-        self.horse_images = os.listdir(root_horse)
-        self.length_dataset = len(self.horse_images) # 1000, 1500
-        self.horse_len = len(self.horse_images)
-
-    def __len__(self):
-        return self.length_dataset
-
-    def __getitem__(self, index):
-        horse_img = self.horse_images[index % self.horse_len]
-
-        horse_path = os.path.join(self.root_horse, horse_img)
-
-        horse_img = Image.open(horse_path).convert("RGB")
+    def __getitem__(self, idx):
+        f = h5py.File(self.path+self.slices[idx], 'r')
+        # keep only T1 slice
+        f = f['image']
+        f = np.array(f)
+        f = f[:,:,0] # T1 slice
 
         if self.transform:
-            horse_img = self.transform(horse_img)
+            f = self.transform(f)
+            return f
+        
+# load npy files
+PATH2 = "/ssd_scratch/cvit/anirudhkaushik/datasets/healthy_brain/train/"
+healthy_brain = []
+for file in glob.glob(PATH2 + "*"):
+    print(file)
+    img = np.load(file)
+    img = cv2.normalize(img, None, norm_type=cv2.NORM_MINMAX)
+    img = img.reshape(img.shape[2:])
+    healthy_brain.append(img[:,:, img.shape[2]//2])
 
-        return horse_img
+class Healthy(Dataset):
+    def __init__(self, transform=None):
+        self.transform = transform
+        self.slices = healthy_brain
+        self.path = PATH2
+        self.image_size = IMAGE_SIZE
+
+    def __len__(self):
+        return len(self.slices)
     
-
-
-class AppleDataset(Dataset):
-    def __init__(self, root_apple, transform=None):
-        self.root_apple = root_apple
-        self.transform = transform
-
-        self.apple_images = os.listdir(root_apple)
-        self.length_dataset = len(self.apple_images) # 1000, 1500
-        self.apple_len = len(self.apple_images)
-
-    def __len__(self):
-        return self.length_dataset
-
-    def __getitem__(self, index):
-        apple_img = self.apple_images[index % self.apple_len]
-
-        apple_path = os.path.join(self.root_apple, apple_img)
-
-        apple_img = Image.open(apple_path).convert("RGB")
-
-
+    def __getitem__(self, idx):
+        f = self.slices[idx]
         if self.transform:
-            apple_img = self.transform(apple_img)
-
-        return apple_img
-    
-
-class OrangeDataset(Dataset):
-    def __init__(self, root_orange, transform=None):
-        self.root_orange = root_orange
-        self.transform = transform
-
-        self.orange_images = os.listdir(root_orange)
-        self.length_dataset = len(self.orange_images) # 1000, 1500
-        self.orange_len = len(self.orange_images)
-
-    def __len__(self):
-        return self.length_dataset
-
-    def __getitem__(self, index):
-        orange_img = self.orange_images[index % self.orange_len]
-
-        orange_path = os.path.join(self.root_orange, orange_img)
-
-        orange_img = Image.open(orange_path).convert("RGB")
-
-        if self.transform:
-            orange_img = self.transform(orange_img)
-
-        return orange_img
+            f = self.transform(f)
+            return f
