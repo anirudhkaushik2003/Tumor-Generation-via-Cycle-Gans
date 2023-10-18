@@ -26,7 +26,7 @@ multiGPU = False
 epochs = 100
 
 lambda_1 = 5
-lambda_2 = 10
+lambda_2 = 25
 
 
 # Set random seed for reproducibility
@@ -127,7 +127,7 @@ batch_per_epoch = int(len(dataset) / BATCH_SIZE)
 n_steps = min_length
 
 
-def train_composite_model(modelD_Z, modelD_H, fake_zebra, fake_horse, rec_zebra, rec_horse, zebra, horse, ones):
+def train_composite_model(modelD_Z, modelD_H, fake_zebra, fake_horse, rec_zebra, rec_horse, zebra, horse, ones, id=True):
     # adversarial loss
     pred_fake_zebra = modelD_Z(fake_zebra)
     loss_GAN_zebra = criterionGAN(pred_fake_zebra, ones)
@@ -141,7 +141,15 @@ def train_composite_model(modelD_Z, modelD_H, fake_zebra, fake_horse, rec_zebra,
     # backward cycle loss
     loss_backward_cycle = criterionCycle(rec_horse, horse) * lambda_2
 
-    lossG = loss_GAN_zebra + loss_GAN_horse + loss_forward_cycle + loss_backward_cycle
+    if id:
+        loss_id_zebra = criterionID(zebra, fake_zebra) * lambda_1
+        loss_id_horse = criterionID(horse, fake_horse) * lambda_1
+
+    else: 
+        loss_id_zebra = 0
+        loss_id_horse = 0
+
+    lossG = loss_GAN_zebra + loss_GAN_horse + loss_forward_cycle + loss_backward_cycle + loss_id_zebra + loss_id_horse
     lossG.backward()
     return lossG
 
