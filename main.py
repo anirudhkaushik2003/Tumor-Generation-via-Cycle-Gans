@@ -11,12 +11,13 @@ import tqdm
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, datasets
 from generator import Generator
-from discriminator import Discriminator
+from discriminator import Discriminator, UNet
 from datasets import *
 import random
 import itertools
 
 from utils import *
+from log import *
 
 BATCH_SIZE = 1
 IMAGE_SIZE = 256
@@ -40,6 +41,7 @@ torch.manual_seed(manualSeed)
 
 # init dataset
 data_transforms = transforms.Compose([
+    transforms.ToPILImage(),
     transforms.Resize((IMAGE_SIZE,IMAGE_SIZE)),
     transforms.ToTensor(),
     transforms.Normalize((0.5), (0.5)),
@@ -47,14 +49,13 @@ data_transforms = transforms.Compose([
 
 data_transforms2 = transforms.Compose([
     transforms.ToPILImage(),
+    transforms.CenterCrop(200),
     transforms.Resize((IMAGE_SIZE,IMAGE_SIZE)),
     transforms.ToTensor(),
     transforms.Normalize((0.5), (0.5)),
 ])
 
-
-
-dataset = Healthy(data_transforms2)
+dataset = Healthy(data_transforms)
 dataset2 = BRATS(data_transforms2)
 
 min_length = min(len(dataset), len(dataset2))
@@ -76,13 +77,13 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # initialize models
 modelG_1 = Generator(IMAGE_SIZE, IMG_CHANNELS)
-modelD_1 = Discriminator(IMG_CHANNELS)
+modelD_1 = UNet(IMG_CHANNELS, 1)
 modelG_1.apply(weights_init)
-modelD_1.apply(weights_init)
+# modelD_1.apply(weights_init)
 modelG_2 = Generator(256, IMG_CHANNELS)
-modelD_2 = Discriminator(IMG_CHANNELS)
+modelD_2 = UNet(IMG_CHANNELS, 1)
 modelG_2.apply(weights_init)
-modelD_2.apply(weights_init)
+# modelD_2.apply(weights_init)
 
 dummy_img = np.ones((BATCH_SIZE, IMG_CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
 patch_shape = modelD_1(torch.FloatTensor(dummy_img)).shape[-1]
@@ -113,8 +114,11 @@ criterionGAN = nn.MSELoss() # adversarial loss
 criterionID = nn.L1Loss() # identity loss
 criterionCycle = nn.L1Loss() # cycle loss (forward)
 
+patch_shape = IMAGE_SIZE
+architechture = "UNET Discriminator"
 ### PRINT STATS ###
 print("***********************")
+print(f"Architechture: {architechture}")
 print("Discriminator Patch shape: ", patch_shape)
 print("Number of samples per epoch: ", len(dataset))
 print("Multi GPU: ", multiGPU)
@@ -177,8 +181,6 @@ def train_D(D, real, fake, ones, zeros):
 
     return loss_D, pred_fake
 
-
-patch_shape = IMAGE_SIZE
 for epoch in range(epochs*2):
     lossG_list = []
     lossD_list = []

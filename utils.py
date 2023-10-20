@@ -13,6 +13,8 @@ def weights_init(m):
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
 
+
+
 def update_image_pool(pool, images, max_size=50):
     selected = list()
     for image in images:

@@ -82,19 +82,21 @@ for vol in volumes:
 # get slices with tumor (mask2 has white pixels for tumor)
 slices = []
 for vol in volumes:
-    for slice in volumes[vol]:
-        f = h5py.File(PATH+slice, 'r')
-        mask = f['mask']
-        mask = np.array(mask)
-        if np.sum(mask[:,:,1]) > 1000:
-            slices.append(slice)
+    slice = volumes[vol][80]
+    slices.append(slice)
+
+    slice = volumes[vol][90]
+    slices.append(slice)
+    
+    slice = volumes[vol][100]
+    slices.append(slice)
+
 
 
 
 # randomly select 1000 slices
 slices = np.array(slices)
 np.random.shuffle(slices)
-slices = slices[:1200]
 print("Number of Tumor slices: ", len(slices))
 et = time.time()
 
@@ -111,10 +113,10 @@ class BRATS(Dataset):
         return len(self.slices)
     
     def __getitem__(self, idx):
-        f = h5py.File(self.path+self.slices[idx], 'r')
+        img = h5py.File(self.path+self.slices[idx], 'r')
         # keep only T1 slice
-        f = f['image']
-        y = f['mask']
+        f = img['image']
+        y = img['mask']
         f = np.array(f)
         f = f[:,:,0] # T1 slice
         y = y[:,:,1]
@@ -140,7 +142,7 @@ for file in glob.glob(PATH2 + "*"):
 healthy_brain = np.array(healthy_brain)
 # select 1200 slices randomly
 np.random.shuffle(healthy_brain)
-healthy_brain = healthy_brain[:1200]
+healthy_brain = healthy_brain[:len(slices)]
 
 class Healthy(Dataset):
     def __init__(self, transform=None):
