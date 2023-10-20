@@ -19,6 +19,8 @@ import itertools
 from utils import *
 from logger import wandb_init, log_images
 
+import os
+
 BATCH_SIZE = 1
 IMAGE_SIZE = 256
 IMG_CHANNELS = 1
@@ -124,7 +126,8 @@ print(f"Architechture: {architechture}")
 print("Discriminator Patch shape: ", patch_shape)
 print("Number of samples per epoch: ", len(dataset))
 print("Multi GPU: ", multiGPU)
-print("Learning rate: ", learning_rate)
+print("Learning rateG: ", learning_rateG)
+print("Learning rateD: ", learning_rateD)
 print("Batch size: ", BATCH_SIZE)
 print("Image size: ", IMAGE_SIZE)
 print("Number of epochs: ", epochs)
@@ -184,6 +187,17 @@ def train_D(D, real, fake, ones, zeros):
     return loss_D, pred_fake
 
 wandb_init(learning_rateG, learning_rateD, epochs*2, BATCH_SIZE, patch_shape, architechture, "BHB->BRATS", multiGPU)
+
+
+# check if latest file exists
+if os.path.exists("/ssd_scratch/cvit/anirudhkaushik/checkpoints/tumor_ganG1_checkpoint_latest.pt"):
+    print("***********************")
+    print("Loading latest checkpoint...")
+    restart_last_checkpoint(modelG_1, optimizerG, multiGPU, "G1")
+    restart_last_checkpoint(modelD_1, optimizerD, multiGPU, "D1")
+    restart_last_checkpoint(modelG_2, optimizerG, multiGPU, "G2")
+    restart_last_checkpoint(modelD_2, optimizerD, multiGPU, "D2")
+    print("***********************", end="\n\n\n\n")
 
 for epoch in range(epochs*2):
     lossG_list = []
@@ -254,8 +268,7 @@ for epoch in range(epochs*2):
     create_checkpoint(modelD_1, epoch, multiGPU, "D1")
     create_checkpoint(modelD_2, epoch, multiGPU, "D2")
 
-    log_images(healthy[0].cpu().detach().numpy().transpose((1,2,0)), fake_healthy[0].cpu().detach().numpy().transpose((1,2,0)), epoch, real=True)
-
+    log_images(healthy, tumor, fake_healthy, fake_tumor, epoch)
     if epoch > epochs:
         schedulerD.step()
         schedulerG.step()

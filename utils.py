@@ -80,11 +80,10 @@ def restart_last_checkpoint(model, optimizer, multiGPU=False, type="G"):
         checkpoint = torch.load(filename)
         model.load_state_dict(checkpoint['model'])
         epoch = checkpoint['epoch']
-        print(f"Restarting from epoch {epoch}")
     else:
         checkpoint = torch.load(filename)
         model.module.load_state_dict(checkpoint['model'])
         epoch = checkpoint['epoch']
-        print(f"Restarting from epoch {epoch}")
+    print(f"Restarting model {type}from epoch {epoch}")
 
     return epoch
