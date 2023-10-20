@@ -26,7 +26,7 @@ multiGPU = False
 epochs = 100
 
 lambda_1 = 5
-lambda_2 = 25
+lambda_2 = 10
 
 
 # Set random seed for reproducibility
@@ -63,8 +63,13 @@ min_length = min(len(dataset), len(dataset2))
 dataset = torch.utils.data.Subset(dataset, np.arange(min_length))
 dataset2 = torch.utils.data.Subset(dataset2, np.arange(min_length))
 
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=True)
+# sampler
+sampler = torch.utils.data.RandomSampler(dataset, num_samples=min_length, replacement=True)
+sampler2 = torch.utils.data.RandomSampler(dataset2, num_samples=min_length, replacement=True)
+
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=(sampler is None), sampler=sampler )
+dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=(sampler2 is None), sampler=sampler2  )
+
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -98,6 +103,11 @@ learning_rate = 2e-4
 optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
 optimizerG = torch.optim.Adam(itertools.chain(modelG_1.parameters(), modelG_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
 
+
+# scheduler to linearly decay learning rate to 0
+schedulerG = torch.optim.lr_scheduler.LinearLR(optimizerG, start_factor=1, end_factor=0.0, total_iters=epochs, last_epoch=-1)
+schedulerD = torch.optim.lr_scheduler.LinearLR(optimizerD, start_factor=1, end_factor=0.0, total_iters=epochs, last_epoch=-1)
+
 # loss functions
 criterionGAN = nn.MSELoss() # adversarial loss
 criterionID = nn.L1Loss() # identity loss
@@ -121,35 +131,35 @@ print("\n\n\n\n\n\n")
     
 n_epoch, n_batch = epochs, BATCH_SIZE
 
-pool_zebra, pool_horse = list(), list()
+pool_tumor, pool_healthy = list(), list()
 batch_per_epoch = int(len(dataset) / BATCH_SIZE)
 
 n_steps = min_length
 
 
-def train_composite_model(modelD_Z, modelD_H, fake_zebra, fake_horse, rec_zebra, rec_horse, zebra, horse, ones, id=True):
+def train_composite_model(modelD_Z, modelD_H, fake_tumor, fake_healthy, rec_tumor, rec_healthy, tumor, healthy, ones, id=True):
     # adversarial loss
-    pred_fake_zebra = modelD_Z(fake_zebra)
-    loss_GAN_zebra = criterionGAN(pred_fake_zebra, ones)
+    pred_fake_tumor = modelD_Z(fake_tumor)
+    loss_GAN_tumor = criterionGAN(pred_fake_tumor, ones)
 
-    pred_fake_horse = modelD_H(fake_horse)
-    loss_GAN_horse = criterionGAN(pred_fake_horse, ones)
+    pred_fake_healthy = modelD_H(fake_healthy)
+    loss_GAN_healthy = criterionGAN(pred_fake_healthy, ones)
 
     # forward cycle loss
-    loss_forward_cycle = criterionCycle(rec_zebra, zebra) * lambda_2
+    loss_forward_cycle = criterionCycle(rec_tumor, tumor) * lambda_2
     
     # backward cycle loss
-    loss_backward_cycle = criterionCycle(rec_horse, horse) * lambda_2
+    loss_backward_cycle = criterionCycle(rec_healthy, healthy) * lambda_2
 
     if id:
-        loss_id_zebra = criterionID(zebra, fake_zebra) * lambda_1
-        loss_id_horse = criterionID(horse, fake_horse) * lambda_1
+        loss_id_tumor = criterionID(tumor, fake_tumor) * lambda_1
+        loss_id_healthy = criterionID(healthy, fake_healthy) * lambda_1
 
     else: 
-        loss_id_zebra = 0
-        loss_id_horse = 0
+        loss_id_tumor = 0
+        loss_id_healthy = 0
 
-    lossG = loss_GAN_zebra + loss_GAN_horse + loss_forward_cycle + loss_backward_cycle + loss_id_zebra + loss_id_horse
+    lossG = loss_GAN_tumor + loss_GAN_healthy + loss_forward_cycle + loss_backward_cycle + loss_id_tumor + loss_id_healthy
     lossG.backward()
     return lossG
 
@@ -168,25 +178,30 @@ def train_D(D, real, fake, ones, zeros):
     return loss_D, pred_fake
 
 
-for epoch in range(epochs):
+patch_shape = IMAGE_SIZE
+for epoch in range(epochs*2):
     lossG_list = []
     lossD_list = []
 
-    D_zebra = 0
-    D_horse = 0
+    D_tumor = 0
+    D_healthy = 0
 
-    for step, (horse, zebra) in enumerate(zip(dataloader, dataloader2)):
+    # randomly choose samples from dataloader
 
-        ones = torch.ones((int(horse.shape[0]), 1, patch_shape, patch_shape)).to(device)
-        zeros = torch.zeros((int(horse.shape[0]), 1, patch_shape, patch_shape)).to(device)
+
+    for step, (healthy, (tumor, tumor_label)) in enumerate(zip(dataloader, dataloader2)):
+
+        # ones = torch.ones((int(healthy.shape[0]), 1, patch_shape, patch_shape)).to(device)
+        ones = tumor_label.to(device)
+        zeros = torch.zeros((int(healthy.shape[0]), 1, patch_shape, patch_shape)).to(device)
         
-        horse = horse.to(device)
-        zebra = zebra.to(device)
+        healthy = healthy.to(device)
+        tumor = tumor.to(device)
 
-        fake_zebra = modelG_1(horse)
-        fake_horse = modelG_2(zebra)
-        rec_zebra = modelG_1(fake_horse)
-        rec_horse = modelG_2(fake_zebra)
+        fake_tumor = modelG_1(healthy)
+        fake_healthy = modelG_2(tumor)
+        rec_tumor = modelG_1(fake_healthy)
+        rec_healthy = modelG_2(fake_tumor)
 
         #  Ds require no gradients when optimizing Gs
         set_model_grad(modelD_1, False)  
@@ -195,7 +210,7 @@ for epoch in range(epochs):
         # Train Gs
         optimizerG.zero_grad()
 
-        loss_G = train_composite_model(modelD_1, modelD_2, fake_zebra, fake_horse, rec_zebra, rec_horse, zebra, horse, ones)
+        loss_G = train_composite_model(modelD_1, modelD_2, fake_tumor, fake_healthy, rec_tumor, rec_healthy, tumor, healthy, ones)
         # add to lost list
         lossG_list.append(loss_G.item())
         optimizerG.step()
@@ -208,23 +223,23 @@ for epoch in range(epochs):
         # Train Ds
         optimizerD.zero_grad()
 
-        fake_zebra_pool = torch.FloatTensor(update_image_pool(pool_zebra, fake_zebra)).to(device)
-        fake_horse_pool = torch.FloatTensor(update_image_pool(pool_horse, fake_horse)).to(device)
-        # zebra D
-        loss_D_1, pred_zebra = train_D(modelD_1, zebra, fake_zebra_pool, ones, zeros)
-        loss_D_2, pred_horse = train_D(modelD_2, horse, fake_horse_pool, ones, zeros)
+        fake_tumor_pool = torch.FloatTensor(update_image_pool(pool_tumor, fake_tumor)).to(device)
+        fake_healthy_pool = torch.FloatTensor(update_image_pool(pool_healthy, fake_healthy)).to(device)
+        # tumor D
+        loss_D_1, pred_tumor = train_D(modelD_1, tumor, fake_tumor_pool, ones, zeros)
+        loss_D_2, pred_healthy = train_D(modelD_2, healthy, fake_healthy_pool, ones, zeros)
 
         loss_D = (loss_D_1 + loss_D_2)*0.5
         lossD_list.append(loss_D.item())
 
-        D_zebra += pred_zebra.mean().item()
-        D_horse += pred_horse.mean().item()
+        D_tumor += pred_tumor.mean().item()
+        D_healthy += pred_healthy.mean().item()
 
         optimizerD.step()
 
         if (step+1) % 500 == 0:
             print(f"Epoch [{epoch+1}/{epochs}], Step [{step+1}/{n_steps}], lossD: {np.mean(lossD_list):.2f}, lossG: {np.mean(lossG_list):.2f}")
-            print(f"pred_tumor: {(D_zebra/(step+1)):.2f}, pred_real: {(D_horse/(step+1)):.2f}")
+            print(f"pred_tumor: {(D_tumor/(step+1)):.2f}, pred_real: {(D_healthy/(step+1)):.2f}")
             print()
 
 
@@ -232,6 +247,14 @@ for epoch in range(epochs):
     create_checkpoint(modelG_2, epoch, multiGPU, "G2")
     create_checkpoint(modelD_1, epoch, multiGPU, "D1")
     create_checkpoint(modelD_2, epoch, multiGPU, "D2")
+
+    if epoch > epochs:
+        schedulerD.step()
+        schedulerG.step()
+
+        print(f"Resetting Discriminator Learning Rate to {schedulerD.get_last_lr()[0]}") 
+        print(f"Resetting Generator Learning Rate to {schedulerG.get_last_lr()[0]}")
+        print("***********************", end="\n\n\n\n")
         
 
 

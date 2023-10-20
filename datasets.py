@@ -114,14 +114,21 @@ class BRATS(Dataset):
         f = h5py.File(self.path+self.slices[idx], 'r')
         # keep only T1 slice
         f = f['image']
+        y = f['mask']
         f = np.array(f)
         f = f[:,:,0] # T1 slice
+        y = y[:,:,1]
+
         f = np.array(f)
         f = f.astype(np.float32)
 
+        y = np.array(y)
+        y = y.astype(np.float32)
+
         if self.transform:
             f = self.transform(f)
-            return f
+            y = self.transform(y)
+            return f,y
         
 # load npy files
 PATH2 = "/ssd_scratch/cvit/anirudhkaushik/datasets/healthy_brain/train/"
