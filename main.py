@@ -17,7 +17,7 @@ import random
 import itertools
 
 from utils import *
-from log import *
+from logger import wandb_init, log_images
 
 BATCH_SIZE = 1
 IMAGE_SIZE = 256
@@ -100,9 +100,11 @@ modelD_1 = modelD_1.to(device)
 modelD_2 = modelD_2.to(device)
 
 # optimizers
-learning_rate = 2e-4
-optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
-optimizerG = torch.optim.Adam(itertools.chain(modelG_1.parameters(), modelG_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
+learning_rateG = 2e-4
+learning_rateD = 2e-4
+
+optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rateD, betas=(0.5, 0.999))
+optimizerG = torch.optim.Adam(itertools.chain(modelG_1.parameters(), modelG_2.parameters()), lr=learning_rateG, betas=(0.5, 0.999))
 
 
 # scheduler to linearly decay learning rate to 0
@@ -181,6 +183,8 @@ def train_D(D, real, fake, ones, zeros):
 
     return loss_D, pred_fake
 
+wandb_init(learning_rateG, learning_rateD, epochs*2, BATCH_SIZE, patch_shape, architechture, "BHB->BRATS", multiGPU)
+
 for epoch in range(epochs*2):
     lossG_list = []
     lossD_list = []
@@ -250,12 +254,17 @@ for epoch in range(epochs*2):
     create_checkpoint(modelD_1, epoch, multiGPU, "D1")
     create_checkpoint(modelD_2, epoch, multiGPU, "D2")
 
+    log_images(healthy[0].cpu().detach().numpy().transpose((1,2,0)), fake_healthy[0].cpu().detach().numpy().transpose((1,2,0)), epoch, real=True)
+
     if epoch > epochs:
         schedulerD.step()
         schedulerG.step()
 
-        print(f"Resetting Discriminator Learning Rate to {schedulerD.get_last_lr()[0]}") 
-        print(f"Resetting Generator Learning Rate to {schedulerG.get_last_lr()[0]}")
+        learning_rateG = schedulerG.get_last_lr()[0]
+        learning_rateD = schedulerD.get_last_lr()[0]
+
+        print(f"Resetting Discriminator Learning Rate to {learning_rateD}") 
+        print(f"Resetting Generator Learning Rate to {learning_rateG}")
         print("***********************", end="\n\n\n\n")
         
 

@@ -1,9 +1,10 @@
 import wandb
 
-def init(modelG, modelD, modelG_2, modelD_2, learning_rate, epochs, batch_size, patch_size, architechture, dataset, multiGPU=False):
+def wandb_init(learning_rateG, learning_rateD, epochs, batch_size, patch_size, architechture, dataset, multiGPU=False):
     project = "Tumor-Generation"
     config = {
-        "learning_rate": learning_rate,
+        "learning_rateG": learning_rateG,
+        "learning_rateD": learning_rateD,
         "architecture": architechture,
         "dataset": dataset,
         "epochs": epochs,
@@ -15,7 +16,7 @@ def init(modelG, modelD, modelG_2, modelD_2, learning_rate, epochs, batch_size, 
     wandb.init(project=project, config=config)
 
 
-def log(healthy, tumor, epoch, real=False):
+def log_images(healthy, tumor, epoch, real=False):
     if real:
         images = wandb.Image(
             [healthy, tumor],
