@@ -65,6 +65,7 @@ st = time.time()
 # organize as per volumes
 PATH= "/ssd_scratch/cvit/anirudhkaushik/datasets/brats2020-training-data/BraTS2020_training_data/content/data/"
 
+print("=============================")
 # organize as per volumes
 volumes = {}
 import glob
@@ -100,7 +101,7 @@ np.random.shuffle(slices)
 print("Number of Tumor slices: ", len(slices))
 et = time.time()
 
-print("Time taken to load data: ", et-st)
+print(f"Time taken to load data: {(et-st):.2f}s" )
 
 class BRATS(Dataset):
     def __init__(self, transform=None):
@@ -168,3 +169,8 @@ class Healthy(Dataset):
         if self.transform:
             f = self.transform(f)
             return f
+
+print("Number of healthy slices: ", len(healthy_brain))
+print("=============================")
+print()
+print()
